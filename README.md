@@ -1,6 +1,15 @@
-﻿A console based toolkit for developing smart contracts on the Bitcoin and Litecoin platforms.
+﻿# Bitcoin Contracts
+
+A console based toolkit for developing smart contracts on the Bitcoin and Litecoin platforms.
 
 Note: Code is for Bitcoin, can be converted to Litecoin by swapping out NBitcoin for NBitcoin.Litecoin.
 
-https://github.com/MetacoSA/Bitcoin
+### References:
 
+https://github.com/MetacoSA/NBitcoin
+
+https://github.com/MetacoSA/NBitcoin.Litecoin
+
+https://github.com/MetacoSA/QBitNinja
+
+https://www.codeproject.com/Articles/835098/NBitcoin-Build-Them-All
