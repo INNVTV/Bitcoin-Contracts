@@ -3,29 +3,13 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using NBitcoin;             //<-- Nuget Package (Client library. Implements all relevant Bitcoin Improvement Proposals (BIPs)
-using QBitNinja.Client;     //<-- Client for API (Can also create your own node server with API to broadcast to Test & Main Networks)
+using NBitcoin; //<-- Nuget Package (Client library. Implements all relevant Bitcoin Improvement Proposals (BIPs)
+using QBitNinja.Client; //<-- Client for API (Can also create your own node server with API to broadcast to Test & Main Networks)
 using QBitNinja.Client.Models;
-using System.Linq;          //<--- Required for .ToArray() calls on NBitcoin Library
+using System.Linq; //<--- Required for .ToArray() calls on NBitcoin Library
 using System.Security.Cryptography; //<--Required for hash comparisons
 using System.Threading;
 
-
-#region Links/Resources
-
-/*
-
-https://github.com/MetacoSA/NBitcoin
-https://github.com/MetacoSA/QBitNinja
-
-https://www.nuget.org/packages/nbitcoin
-https://www.nuget.org/packages/QBitninja.Client
-
-https://github.com/ProgrammingBlockchain/ProgrammingBlockchainCodeExamples
-
-*/
-
-#endregion
 
 namespace BitcoinContracts
 {
