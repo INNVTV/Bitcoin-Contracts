@@ -1,2 +1,6 @@
-# Bitcoin-Contracts
-Starter templates for generating Bitcoin/Litecoin contracts using NBitcoin and .NET/C#
+﻿A console based toolkit for developing smart contracts on the Bitcoin and Litecoin platforms.
+
+Note: Code is for Bitcoin, can be converted to Litecoin by swapping out NBitcoin for NBitcoin.Litecoin.
+
+https://github.com/MetacoSA/Bitcoin
+
