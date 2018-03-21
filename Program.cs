@@ -79,42 +79,76 @@ namespace BitcoinContracts
 
         #region Contracts
 
+        /// <summary>
+        /// Simple transaction that is locked for x amount of hours before being processed
+        /// </summary>
         public static void SimpleTimeLockContract()
         {
-            var client = new QBitNinjaClient(_network);
 
             var privKey = (_contractorHdRoot.Derive(new KeyPath("m/44'/0'/0'/0/0"))).PrivateKey.GetWif(_network);
-            
 
             var secret = new BitcoinSecret(privKey.ToString(), _network);
             var key = secret.PrivateKey;
+            var changeAddress = secret.GetAddress().ScriptPubKey;
+            
+            string previousOutputTxId = "26b3a2ff92a918ad8c46c2da7dbf4c27c7a12bd24655c9d12f03d0f18edcede6";
+            int unspentOutputIndex = 0; //<-- The index of the unspent output from the previous transaction
+
+            string contracteePublicAddress = "n4bEeKENL9rED2cG31TjSNzPs6T15TCq96";
+
+            int feeAmount = 2000;
+            int paymentAmount = 1002000;
+            int changeAmount = 51993000;
+
+            //Hours to wait until transaction is allowed to process
+            int timeLockHours = 5;
 
             //Console.WriteLine(privKey + "|" + secret.GetAddress());
+
+            #region Inputs
 
             var transaction = new Transaction();
             transaction.Inputs.Add(new TxIn()
             {
-                PrevOut = new OutPoint(new uint256("08de64343b536ab2cc61427da383564f379f458bb690933854d0e633c5147d85"), 0),
+                PrevOut = new OutPoint(new uint256(previousOutputTxId), unspentOutputIndex), //<-- The output we are spending from
                 ScriptSig = secret.GetAddress().ScriptPubKey
             });
 
+            #endregion
 
-            var destination = BitcoinAddress.Create("n4bEeKENL9rED2cG31TjSNzPs6T15TCq96");
-            Money fee = Money.Satoshis(100);
+            #region Outputs
 
+            var destination = BitcoinAddress.Create(contracteePublicAddress);
+            Money fee = Money.Satoshis(feeAmount);
+
+
+            // The amount we are sending to the contractee (minus the mining fee)
             transaction.Outputs.Add(new TxOut()
             {
                 ScriptPubKey = destination.ScriptPubKey,
-                Value = (Money.Satoshis(1100) - fee)
+                Value = Money.Satoshis(paymentAmount)
+            });
+            
+
+            // The change address for the contractor
+            transaction.Outputs.Add(new TxOut()
+            {
+                ScriptPubKey = changeAddress,
+                Value = Money.Satoshis(changeAmount)
             });
 
+            #endregion
 
-            transaction.LockTime = new LockTime(DateTime.Now.AddHours(5));
+            transaction.LockTime = new LockTime(DateTime.Now.AddHours(timeLockHours));
 
             transaction.Sign(secret, false);
 
+            
+
             Console.WriteLine("Timelock contract signed and broadcast.");
 
+
+            #region Broadcast transaction using NBitcoin rather than QBitServerClient
 
             /*
             //Use Bitnodes to find a node to connect to: https://bitnodes.earn.com/  |  https://bitnodes.earn.com/nodes/
@@ -129,20 +163,30 @@ namespace BitcoinContracts
             node.Disconnect();
             */
 
-            //using QBit server instead:
+            #endregion
+
+
+            Console.WriteLine(transaction.ToString());
+            /*
+            //Broadcast using QBit server:
+            var client = new QBitNinjaClient(_network);
             BroadcastResponse broadcastResponse = client.Broadcast(transaction).Result;
 
 
             Console.WriteLine("Transaction ID: " + transaction.GetHash().ToString());
-
             Console.WriteLine();
 
-            if(!broadcastResponse.Success)
+            if(broadcastResponse.Success)
             {
-                Console.WriteLine("Error-------------");
+                Console.WriteLine("Broadcast succeeded!");
+            }
+            else
+            {
+                Console.WriteLine("Broadcase Error!");
+                Console.WriteLine();
                 Console.WriteLine(broadcastResponse.Error.Reason);
             }
-            
+            */
         }
 
         #endregion
