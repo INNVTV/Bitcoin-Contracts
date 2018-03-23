@@ -6,7 +6,7 @@ Note: Code is for Bitcoin, can be converted to Litecoin by swapping out NBitcoin
 
 ### References
 
-###### Terminal Commands to find TestNet nodes:
+##### Terminal Commands to find TestNet nodes:
 ```
 for i in testnet - seed.bitcoin.jonasschnelli.ch \
 	seed.tbtc.petertodd.org \
@@ -17,15 +17,15 @@ do
 done
 ```
 
-###### GitHub
+##### GitHub
 https://github.com/MetacoSA/NBitcoin
 https://github.com/MetacoSA/NBitcoin.Litecoin
 https://github.com/MetacoSA/QBitNinja
 
-###### Nuget
+##### Nuget
 https://www.nuget.org/packages/nbitcoin
 https://www.nuget.org/packages/QBitninja.Client
 
-###### Articles
+##### Articles
 https://github.com/ProgrammingBlockchain/ProgrammingBlockchainCodeExamples
 https://www.codeproject.com/Articles/835098/NBitcoin-Build-Them-All
