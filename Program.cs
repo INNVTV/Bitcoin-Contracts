@@ -9,7 +9,7 @@ using QBitNinja.Client.Models;
 using System.Linq; //<--- Required for .ToArray() calls on NBitcoin Library
 using System.Security.Cryptography; //<--Required for hash comparisons
 using System.Threading;
-
+using NBitcoin.Protocol; //<-- Required for NBicoin Protocol Node Messaging
 
 namespace BitcoinContracts
 {
@@ -75,14 +75,10 @@ namespace BitcoinContracts
 
         }
 
-        #endregion
-
-        #region Contracts
-
         /// <summary>
         /// Simple transaction that is locked for x amount of hours before being processed
         /// </summary>
-        public static void SimpleTimeLockContract()
+        public static void SendSimpleTransation()
         {
 
             var privKey = (_contractorHdRoot.Derive(new KeyPath("m/44'/0'/0'/0/0"))).PrivateKey.GetWif(_network);
@@ -90,7 +86,7 @@ namespace BitcoinContracts
             var secret = new BitcoinSecret(privKey.ToString(), _network);
             var key = secret.PrivateKey;
             var changeAddress = secret.GetAddress().ScriptPubKey;
-            
+
             string previousOutputTxId = "26b3a2ff92a918ad8c46c2da7dbf4c27c7a12bd24655c9d12f03d0f18edcede6";
             int unspentOutputIndex = 0; //<-- The index of the unspent output from the previous transaction
 
@@ -99,11 +95,6 @@ namespace BitcoinContracts
             int feeAmount = 2000;
             int paymentAmount = 1002000;
             int changeAmount = 51993000;
-
-            //Hours to wait until transaction is allowed to process
-            int timeLockHours = 5;
-
-            //Console.WriteLine(privKey + "|" + secret.GetAddress());
 
             #region Inputs
 
@@ -122,13 +113,12 @@ namespace BitcoinContracts
             Money fee = Money.Satoshis(feeAmount);
 
 
-            // The amount we are sending to the contractee (minus the mining fee)
             transaction.Outputs.Add(new TxOut()
             {
                 ScriptPubKey = destination.ScriptPubKey,
                 Value = Money.Satoshis(paymentAmount)
             });
-            
+
 
             // The change address for the contractor
             transaction.Outputs.Add(new TxOut()
@@ -138,14 +128,11 @@ namespace BitcoinContracts
             });
 
             #endregion
-
-            transaction.LockTime = new LockTime(DateTime.Now.AddHours(timeLockHours));
-
+            
             transaction.Sign(secret, false);
 
-            
 
-            Console.WriteLine("Timelock contract signed and broadcast.");
+            Console.WriteLine("Transaction signed and broadcast.");
 
 
             #region Broadcast transaction using NBitcoin rather than QBitServerClient
@@ -166,8 +153,6 @@ namespace BitcoinContracts
             #endregion
 
 
-            Console.WriteLine(transaction.ToString());
-            /*
             //Broadcast using QBit server:
             var client = new QBitNinjaClient(_network);
             BroadcastResponse broadcastResponse = client.Broadcast(transaction).Result;
@@ -186,7 +171,125 @@ namespace BitcoinContracts
                 Console.WriteLine();
                 Console.WriteLine(broadcastResponse.Error.Reason);
             }
-            */
+            
+        }
+
+
+        #endregion
+
+        #region Contracts
+
+        /// <summary>
+        /// Simple transaction that is locked for x amount of hours before being processed
+        /// </summary>
+        public static void SimpleTimeLockContract()
+        {
+
+            var contractorPrivateKey = (_contractorHdRoot.Derive(new KeyPath("m/44'/0'/0'/0/0"))).PrivateKey.GetWif(_network);
+            var contractorSecret = new BitcoinSecret(contractorPrivateKey.ToString(), _network);
+
+            var contracteePrivateKey = (_contracteeHdRoot.Derive(new KeyPath("m/44'/0'/0'/0/0"))).PrivateKey.GetWif(_network);
+            var contracteeSecret = new BitcoinSecret(contracteePrivateKey.ToString(), _network);
+
+            string feeAmount = ".0001";
+            string paymentAmount = ".1";
+            int lockTimeHours = 5; // <-- Hours to wait until transaction is allowed to process
+
+
+            //Collect the spendable coins from previous transction
+            Transaction contractorFunding = new Transaction()
+            {
+                Outputs =
+                {
+                    new TxOut("0.52993000", contractorSecret.GetAddress()) // <-- mnK61nsKBHVHs71HgmeiEqfF8yRFq7ayKq address has 0.52993000 tBTC available
+                }
+            };
+            Coin[] contractorCoins = contractorFunding
+                .Outputs
+                .Select((o, i) => new Coin(new OutPoint(contractorFunding.GetHash(), i), o)) // <-- We loop through all the indexes available for spending
+                .ToArray();
+
+
+            //Now we can build a transaction where we send a timelock payment to the contractor
+            var txBuilder = new TransactionBuilder();
+            var tx = txBuilder
+                .AddCoins(contractorCoins)
+                .AddKeys(contractorSecret.PrivateKey)
+                .Send(contracteeSecret.GetAddress(), paymentAmount)
+                .SendFees(feeAmount)
+                .SetChange(contractorSecret.GetAddress())
+                //.SetLockTime(new LockTime(DateTimeOffset.Now.AddHours(lockTimeHours)))
+                .BuildTransaction(true);
+
+
+            if(txBuilder.Verify(tx))
+            {
+                Console.WriteLine("Timelock contract created, and signed.");
+
+                //Console.WriteLine();
+                //Console.WriteLine(tx.ToString());
+
+                #region Broadcast transaction using NBitcoin with node connection
+
+
+                //Use Bitnodes to find a node to connect to: https://bitnodes.earn.com/  |  https://bitnodes.earn.com/nodes/
+                //For Testnet you may have to find a faucet provider that also provides node information. 
+
+
+                var node = NBitcoin.Protocol.Node.Connect(_network, "185.28.76.179:18333");
+                node.VersionHandshake();
+
+               // var payload = NBitcoin.Protocol.Payload(tx);
+
+                //inform the server
+                node.SendMessage(new InvPayload(tx));
+                Thread.Sleep(1000);
+
+                //send the transaction
+                node.SendMessage(new TxPayload(tx));
+                Thread.Sleep(5000);
+
+                node.Disconnect();
+
+                Console.WriteLine("Transaction ID: " + tx.GetHash().ToString());
+                Console.WriteLine();
+
+
+                #endregion
+
+                #region Broadcast transaction using QbitServerClient
+
+                /*
+                //Broadcast using QBit server:
+                var client = new QBitNinjaClient(_network);
+                BroadcastResponse broadcastResponse = client.Broadcast(tx).Result;
+
+
+                Console.WriteLine("Transaction ID: " + tx.GetHash().ToString());
+                Console.WriteLine();
+
+                if(broadcastResponse.Success)
+                {
+                    Console.WriteLine("Broadcast succeeded!");
+                }
+                else
+                {
+                    Console.WriteLine("Broadcase Error!");
+                    Console.WriteLine();
+                    Console.WriteLine(broadcastResponse.Error.Reason);
+                }
+
+                */
+
+                #endregion
+            }
+            else
+            {
+                Console.WriteLine("Timelock contract has some issues.");
+            }
+
+
+
         }
 
         #endregion
