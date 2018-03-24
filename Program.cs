@@ -29,6 +29,7 @@ namespace BitcoinContracts
             OpenWallets();
             Console.WriteLine();
 
+
             SimpleTimeLockContract();
             Console.WriteLine();
 
@@ -39,7 +40,9 @@ namespace BitcoinContracts
 
         #region Setup & Utilities
 
-        //Create Bitcoin address and HD seed phrase
+        /// <summary>
+        /// Create Bitcoin address and HD seed phrase
+        /// </summary>
         public static void CreateAddress()
         {
             Mnemonic mnemo = new Mnemonic(Wordlist.English, WordCount.Twelve);
@@ -62,7 +65,9 @@ namespace BitcoinContracts
 
         }
 
-        //Open wallets for contract examples to transact with
+        /// <summary>
+        /// Open wallets for contract examples to transact with
+        /// </summary>
         public static void OpenWallets()
         {
             _contractorHdRoot = ExtKey.Parse(_contractorWif, _network);
@@ -74,6 +79,63 @@ namespace BitcoinContracts
             Console.WriteLine("Contractee wallet open. (" + contracteePublicAddress.ScriptPubKey.GetDestinationAddress(_network) + ")");
 
         }
+
+
+
+
+
+        #endregion
+
+        #region Example Scripts
+
+        /// <summary>
+        /// Work with previous transactions to build out available coin data
+        /// </summary>
+        public static void WorkingWithCoins()
+        {
+            //Create a client for our QBitNinja API calls
+            var client = new QBitNinjaClient(_network);
+
+
+            //Get the unspent outputs/coins from the last transaction for the contractor that can be used
+            //GetTransactionResponse transactionResponse = client.GetTransaction(uint256.Parse("3fd79e0843b8f834737abfb7c39a65bcab164d3229a1da3b71224989c2ab048b")).Result;
+            GetTransactionResponse transactionResponse = client.GetTransaction(uint256.Parse("26b3a2ff92a918ad8c46c2da7dbf4c27c7a12bd24655c9d12f03d0f18edcede6")).Result;
+
+
+
+            //Generate a list of receive coins from the transaction
+            List<ICoin> receivedCoins = transactionResponse.ReceivedCoins;
+            List<ICoin> spentCoins = transactionResponse.SpentCoins;
+
+            Console.WriteLine("--------------- RECEIVED COINS------------------");
+            Console.WriteLine();
+            foreach (var coin in receivedCoins)
+            {
+                Money amount = (Money)coin.Amount;
+                var paymentScript = coin.TxOut.ScriptPubKey;
+                var address = paymentScript.GetDestinationAddress(_network);
+
+                Console.WriteLine("Amount: " + amount.ToDecimal(MoneyUnit.BTC) + " | " + paymentScript + " | " + address);
+                Console.WriteLine();
+
+            }
+
+            Console.WriteLine();
+
+            Console.WriteLine("--------------- SPENT COINS ------------------");
+            Console.WriteLine();
+            foreach (var coin in spentCoins)
+            {
+                Money amount = (Money)coin.Amount;
+                var paymentScript = coin.TxOut.ScriptPubKey;
+                var address = paymentScript.GetDestinationAddress(_network);
+
+                Console.WriteLine("Amount: " + amount.ToDecimal(MoneyUnit.BTC) + " | " + paymentScript + " | " + address);
+                Console.WriteLine();
+
+            }
+        }
+
 
         /// <summary>
         /// Simple transaction that is locked for x amount of hours before being processed
@@ -128,7 +190,7 @@ namespace BitcoinContracts
             });
 
             #endregion
-            
+
             transaction.Sign(secret, false);
 
 
@@ -161,7 +223,7 @@ namespace BitcoinContracts
             Console.WriteLine("Transaction ID: " + transaction.GetHash().ToString());
             Console.WriteLine();
 
-            if(broadcastResponse.Success)
+            if (broadcastResponse.Success)
             {
                 Console.WriteLine("Broadcast succeeded!");
             }
@@ -171,104 +233,71 @@ namespace BitcoinContracts
                 Console.WriteLine();
                 Console.WriteLine(broadcastResponse.Error.Reason);
             }
-            
+
         }
 
 
-        #endregion
-
-        #region Contracts
-
         /// <summary>
-        /// Simple transaction that is locked for x amount of hours before being processed
+        /// Send a message of 80 bytes or less
         /// </summary>
-        public static void SimpleTimeLockContract()
+        /// <param name="message"></param>
+        /// <returns></returns>
+        public static bool SendMessage(string message)
         {
+            var messageBytes = Encoding.UTF8.GetBytes(message);
 
-            var contractorPrivateKey = (_contractorHdRoot.Derive(new KeyPath("m/44'/0'/0'/0/0"))).PrivateKey.GetWif(_network);
-            var contractorSecret = new BitcoinSecret(contractorPrivateKey.ToString(), _network);
+            //Create a client for our QBitNinja API calls
+            var client = new QBitNinjaClient(_network);
 
-            var contracteePrivateKey = (_contracteeHdRoot.Derive(new KeyPath("m/44'/0'/0'/0/0"))).PrivateKey.GetWif(_network);
-            var contracteeSecret = new BitcoinSecret(contracteePrivateKey.ToString(), _network);
+            var privateKey = (_contractorHdRoot.Derive(new KeyPath("m/44'/0'/0'/0/0"))).PrivateKey.GetWif(_network);
+            var secret = new BitcoinSecret(privateKey.ToString(), _network);
 
-            string feeAmount = ".0001";
-            string paymentAmount = ".1";
-            int lockTimeHours = 5; // <-- Hours to wait until transaction is allowed to process
+            var changeAddress = secret.GetAddress().ScriptPubKey;
+            int changeAmount = 166712111;
+
+            string previousOutputTxId = "af6836c0ced8dad52ae7a02d5f81185a2cd5c369e11e368b35d2bc2bea960e2e";
+            int unspentOutputIndex = 0; //<-- The index of the unspent output from the previous transaction
 
 
-            //Collect the spendable coins from previous transction
-            Transaction contractorFunding = new Transaction()
+            try
             {
-                Outputs =
+
+                var transaction = new Transaction();
+
+                //Previous input with spendable assets
+                transaction.Inputs.Add(new TxIn()
                 {
-                    new TxOut("0.52993000", contractorSecret.GetAddress()) // <-- mnK61nsKBHVHs71HgmeiEqfF8yRFq7ayKq address has 0.52993000 tBTC available
-                }
-            };
-            Coin[] contractorCoins = contractorFunding
-                .Outputs
-                .Select((o, i) => new Coin(new OutPoint(contractorFunding.GetHash(), i), o)) // <-- We loop through all the indexes available for spending
-                .ToArray();
+                    PrevOut = new OutPoint(new uint256(previousOutputTxId), unspentOutputIndex), //<-- The output we are spending from
+                    ScriptSig = secret.GetAddress().ScriptPubKey
+                });
+
+                //The message
+                transaction.Outputs.Add(new TxOut()
+                {
+                    Value = Money.Zero,
+                    ScriptPubKey = TxNullDataTemplate.Instance.GenerateScriptPubKey(messageBytes)
+                });
+
+                // The change address for the contractor
+                transaction.Outputs.Add(new TxOut()
+                {
+                    ScriptPubKey = changeAddress,
+                    Value = Money.Satoshis(changeAmount)
+                });
 
 
-            //Now we can build a transaction where we send a timelock payment to the contractor
-            var txBuilder = new TransactionBuilder();
-            var tx = txBuilder
-                .AddCoins(contractorCoins)
-                .AddKeys(contractorSecret.PrivateKey)
-                .Send(contracteeSecret.GetAddress(), paymentAmount)
-                .SendFees(feeAmount)
-                .SetChange(contractorSecret.GetAddress())
-                //.SetLockTime(new LockTime(DateTimeOffset.Now.AddHours(lockTimeHours)))
-                .BuildTransaction(true);
+                transaction.Sign(secret, false);
 
 
-            if(txBuilder.Verify(tx))
-            {
-                Console.WriteLine("Timelock contract created, and signed.");
+                Console.WriteLine("Transaction signed and broadcast.");
 
-                //Console.WriteLine();
-                //Console.WriteLine(tx.ToString());
-
-                #region Broadcast transaction using NBitcoin with node connection
+                BroadcastResponse broadcastResponse = client.Broadcast(transaction).Result;
 
 
-                //Use Bitnodes to find a node to connect to: https://bitnodes.earn.com/  |  https://bitnodes.earn.com/nodes/
-                //For Testnet you may have to find a faucet provider that also provides node information. 
-
-
-                var node = NBitcoin.Protocol.Node.Connect(_network, "185.28.76.179:18333");
-                node.VersionHandshake();
-
-               // var payload = NBitcoin.Protocol.Payload(tx);
-
-                //inform the server
-                node.SendMessage(new InvPayload(tx));
-                Thread.Sleep(1000);
-
-                //send the transaction
-                node.SendMessage(new TxPayload(tx));
-                Thread.Sleep(5000);
-
-                node.Disconnect();
-
-                Console.WriteLine("Transaction ID: " + tx.GetHash().ToString());
+                Console.WriteLine("Transaction ID: " + transaction.GetHash().ToString());
                 Console.WriteLine();
 
-
-                #endregion
-
-                #region Broadcast transaction using QbitServerClient
-
-                /*
-                //Broadcast using QBit server:
-                var client = new QBitNinjaClient(_network);
-                BroadcastResponse broadcastResponse = client.Broadcast(tx).Result;
-
-
-                Console.WriteLine("Transaction ID: " + tx.GetHash().ToString());
-                Console.WriteLine();
-
-                if(broadcastResponse.Success)
+                if (broadcastResponse.Success)
                 {
                     Console.WriteLine("Broadcast succeeded!");
                 }
@@ -279,20 +308,211 @@ namespace BitcoinContracts
                     Console.WriteLine(broadcastResponse.Error.Reason);
                 }
 
-                */
 
-                #endregion
             }
-            else
+            catch (Exception e)
             {
-                Console.WriteLine("Timelock contract has some issues.");
+                Console.WriteLine(e.Message);
             }
+
+
+
+            Console.WriteLine();
+            return true;
 
 
 
         }
 
+
         #endregion
 
-    }
+        #region Contracts
+
+        /// <summary>
+        /// Simple transaction that is locked for x amount of hours before being processed
+        /// </summary>
+        public static bool SimpleTimeLockContract()
+        {
+            //Create a client for our QBitNinja API calls
+            var client = new QBitNinjaClient(_network);
+
+            var contractorPrivateKey = (_contractorHdRoot.Derive(new KeyPath("m/44'/0'/0'/0/0"))).PrivateKey.GetWif(_network);
+            var contractorSecret = new BitcoinSecret(contractorPrivateKey.ToString(), _network);
+
+            var contracteeAddress = BitcoinAddress.Create("n4bEeKENL9rED2cG31TjSNzPs6T15TCq96", _network);
+
+            //Calculate all payments and fees
+            var contracteePaymentAmount = new Money(0.1m, MoneyUnit.BTC);
+            var minerFee = new Money(0.00007m, MoneyUnit.BTC);
+            
+
+            int lockTimeHours = 5; // <-- Hours to wait until transaction is allowed to process
+
+            //Collect the spendable coins from a previous transction
+            GetTransactionResponse transactionResponse = client.GetTransaction(uint256.Parse("f9f650416c5c3b1ebb6137734f0daf31f91744398eab1a88ba806cf10d7afb6c")).Result;
+            List<ICoin> receivedCoins = transactionResponse.ReceivedCoins;
+
+            OutPoint outPointToSpend = null;
+
+            Console.WriteLine("------ Available Coins ------");
+            Console.WriteLine();
+
+            foreach (var coin in receivedCoins)
+            {
+                if(coin.TxOut.ScriptPubKey == contractorPrivateKey.ScriptPubKey)
+                {
+                    outPointToSpend = coin.Outpoint;
+
+                    Money amount = (Money)coin.Amount;
+                    var paymentScript = coin.TxOut.ScriptPubKey;
+                    var address = paymentScript.GetDestinationAddress(_network);
+
+                    Console.WriteLine("Amount: " + amount.ToDecimal(MoneyUnit.BTC) + " | " + paymentScript + " | " + address);
+                    Console.WriteLine();
+                }
+
+
+            }
+           
+
+            if (outPointToSpend == null)
+            {
+                Console.WriteLine("Transaction does not contain our ScriptPubKey!");
+                return false;
+            }
+
+            Console.WriteLine("-----------------------------");
+
+
+
+
+            //calculate change amount (not actually used, TransactionBuilder will handle for us):
+            var txInAmount = (Money)receivedCoins[(int)outPointToSpend.N].Amount;
+            var changeAmount = txInAmount - contracteePaymentAmount - minerFee;
+
+
+            #region Console Output (Payment Details)
+
+            Console.WriteLine();
+            Console.WriteLine();
+            Console.WriteLine("------ Payment Details ------");
+            Console.WriteLine();
+
+            Console.WriteLine("Total available: " + txInAmount.ToString() + " btc");
+            Console.WriteLine();
+            Console.WriteLine("Total payments: " + contracteePaymentAmount.ToString() + " btc");
+            Console.WriteLine();
+            Console.WriteLine("Total fees: " + minerFee.ToString() + " btc");
+            Console.WriteLine();
+            Console.WriteLine("Change: " + changeAmount.ToString() + " btc");
+            Console.WriteLine();
+
+
+            Console.WriteLine("-----------------------------");
+
+            Console.WriteLine("");
+            Console.WriteLine("Press any key to create, sign and broadcast transaction...");
+            Console.ReadLine();
+
+            #endregion
+
+
+
+            try
+            {
+                //Now we can build a transaction where we send a timelock payment to the contractor
+                var txBuilder = new TransactionBuilder();
+                var tx = txBuilder
+                    .AddCoins(receivedCoins)
+                    .AddKeys(contractorSecret.PrivateKey)
+                    .Send(contracteeAddress.ScriptPubKey, contracteePaymentAmount)
+                    .SendFees(minerFee)
+                    .SetChange(contractorSecret.GetAddress())
+                    .SetLockTime(new LockTime(DateTimeOffset.Now.AddHours(lockTimeHours)))
+                    .BuildTransaction(true);
+
+
+                if (txBuilder.Verify(tx))
+                {
+                    Console.WriteLine("Timelock contract created, and signed.");
+
+                    //Console.WriteLine();
+                    //Console.WriteLine(tx.ToString()); //<-- Print out entire transaction as JSON
+
+                    #region Broadcast transaction using NBitcoin with node connection
+
+                    /*
+                    //Use Bitnodes to find a node to connect to: https://bitnodes.earn.com/  |  https://bitnodes.earn.com/nodes/
+                    //For Testnet you may have to find a faucet provider that also provides node information. 
+
+
+                    var node = NBitcoin.Protocol.Node.Connect(_network, "52.10.6.141:18333"); //<-- ReadMe has Terminal commands for looking up available Testnet Nodes. All Testnodes use :18333
+                    node.VersionHandshake();
+
+                   // var payload = NBitcoin.Protocol.Payload(tx);
+
+                    //inform the server
+                    node.SendMessage(new InvPayload(tx));
+                    Thread.Sleep(1000);
+
+                    //send the transaction
+                    node.SendMessage(new TxPayload(tx));
+                    Thread.Sleep(5000);
+
+                    node.Disconnect();
+
+                    Console.WriteLine("Transaction ID: " + tx.GetHash().ToString());
+                    Console.WriteLine();
+
+                    */
+
+                    #endregion
+
+                    #region Broadcast transaction using QbitServerClient
+
+
+                    //Broadcast using QBit server:
+                    BroadcastResponse broadcastResponse = client.Broadcast(tx).Result;
+
+
+                    Console.WriteLine("Transaction ID: " + tx.GetHash().ToString());
+                    Console.WriteLine();
+
+                    if (broadcastResponse.Success)
+                    {
+                        Console.WriteLine("Broadcast succeeded!");
+                    }
+                    else
+                    {
+                        Console.WriteLine("Broadcase Error!");
+                        Console.WriteLine();
+                        Console.WriteLine(broadcastResponse.Error.Reason);
+                    }
+
+
+
+                    #endregion
+                }
+                else
+                {
+                    Console.WriteLine("Timelock contract has some issues.");
+                }
+            }
+            catch(Exception e)
+            {
+                Console.WriteLine(e.Message);
+            }
+
+
+
+            Console.WriteLine();
+            return true;
+
+            
+        }
+
+    #endregion
+ 
+     }
 }

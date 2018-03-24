@@ -17,6 +17,8 @@ do
 done
 ```
 
+You can also get testnet nodes by opening up a testnet version of the Electrum wallet and looking at network preferences.
+
 ##### GitHub
 https://github.com/MetacoSA/NBitcoin
 https://github.com/MetacoSA/NBitcoin.Litecoin
