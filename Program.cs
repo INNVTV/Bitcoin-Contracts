@@ -347,10 +347,15 @@ namespace BitcoinContracts
             var minerFee = new Money(0.00007m, MoneyUnit.BTC);
             
 
-            int lockTimeHours = 5; // <-- Hours to wait until transaction is allowed to process
+            int lockTimeMinutes = 5; // <-- Minutes to wait until transaction is allowed to process
+            var lockTime = new LockTime(DateTimeOffset.UtcNow.AddMinutes(5));
+            Console.WriteLine("LockTime set to:" + lockTime.ToString());
+
+
+
 
             //Collect the spendable coins from a previous transction
-            GetTransactionResponse transactionResponse = client.GetTransaction(uint256.Parse("f9f650416c5c3b1ebb6137734f0daf31f91744398eab1a88ba806cf10d7afb6c")).Result;
+            GetTransactionResponse transactionResponse = client.GetTransaction(uint256.Parse("e4a06cac11b257908a908e90dda19b4b5e3d5a0f172d6b90ad8b0950878507be")).Result;
             List<ICoin> receivedCoins = transactionResponse.ReceivedCoins;
 
             OutPoint outPointToSpend = null;
@@ -412,7 +417,7 @@ namespace BitcoinContracts
             Console.WriteLine("-----------------------------");
 
             Console.WriteLine("");
-            Console.WriteLine("Press any key to create, sign and broadcast transaction...");
+            Console.WriteLine("Press any key to create transaction...");
             Console.ReadLine();
 
             #endregion
@@ -429,13 +434,20 @@ namespace BitcoinContracts
                     .Send(contracteeAddress.ScriptPubKey, contracteePaymentAmount)
                     .SendFees(minerFee)
                     .SetChange(contractorSecret.GetAddress())
-                    .SetLockTime(new LockTime(DateTimeOffset.Now.AddHours(lockTimeHours)))
+                    //.SetLockTime(lockTime)
                     .BuildTransaction(true);
 
+                tx.LockTime = 500123;
 
                 if (txBuilder.Verify(tx))
                 {
-                    Console.WriteLine("Timelock contract created, and signed.");
+                    Console.WriteLine(tx.ToString());
+
+                    Console.WriteLine("Timelock contract created, signed and verified!");
+
+                    Console.WriteLine("");
+                    Console.WriteLine("Press any key to broadcast...");
+                    Console.ReadLine();
 
                     //Console.WriteLine();
                     //Console.WriteLine(tx.ToString()); //<-- Print out entire transaction as JSON
@@ -485,7 +497,7 @@ namespace BitcoinContracts
                     }
                     else
                     {
-                        Console.WriteLine("Broadcase Error!");
+                        Console.WriteLine("Broadcast Error!");
                         Console.WriteLine();
                         Console.WriteLine(broadcastResponse.Error.Reason);
                     }
